@@ -1,0 +1,262 @@
+---
+title: "RQ2 Logistic Regression"
+author: "Shiya"
+date: "Nov. 18th, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+setwd("C:/Users/Shiya/Desktop/PIAAC/2_Regression/2.2_Logistic Regression")
+load("C:/Users/Shiya/Desktop/PIAAC/2_Regression/2.1_Linear Regression/.RData")
+```
+
+## RQ2-b.
+### Build linear regression models to investigate the extent skills used at work are associated with full-time professionals' PS-TRE proficiency scores.
+The coefficients of logistic regression models are called log-odds ratios.
+For easy interpretation, we generate odds ratios by exponentiating log-odds ratios.
+
+PS-TRE Model 0: Country (Overall)
+Here we see that the estimated odds of socring at the top (25%) increases 63% (O.R.=1.63, 95% CI: ????) if the respodent's country is SWE and this is statistically significant (p<.001).
+```{r}
+dat.all$CNTRYID<-as.factor(dat.all$CNTRYID)
+
+quantile(dat.all$mean.PSL10,.75,na.rm=TRUE)
+
+if(!("Hmisc" %in% installed.packages()[,1])) {
+ install.packages("Hmisc")
+ }
+library(Hmisc)
+
+dat.all$PSL10.top.quar<-cut2(dat.all$mean.PSL10,324.1575)
+
+PSL.glm0<-glm(dat.all$PSL10.top.quar~CNTRYID,data=dat.all,family="binomial")
+PSL.glm0
+summary(PSL.glm0)
+
+library(sjPlot)
+sjp.glm(PSL.glm0)
+```
+
+PS-TRE Model 1: Country + Socio-Demographic Background (Overall)
+```{r}
+dat.all$GENDER<-as.factor(dat.all$GENDER)
+dat.all$AGE10BAND<-as.factor(dat.all$AGE10BAND)
+dat.all$PARED<-as.factor(dat.all$PARED)
+dat.all$EDU<-as.factor(dat.all$EDU)
+
+PSL.glm1<-glm(dat.all$PSL10.top.quar~CNTRYID +GENDER+AGE10BAND+PARED+EDU,data=dat.all,family="binomial")
+PSL.glm1
+summary(PSL.glm1)
+
+library(sjPlot)
+sjp.glm(PSL.glm1)
+```
+
+PS-TRE Model 2: Country + Socio-Demographic Background + Occupational Categories (Overall)
+```{r}
+dat.all$Sector<-as.factor(dat.all$Sector)
+dat.all$Role<-as.factor(dat.all$Role)
+dat.all$ISCO2C<-as.factor(dat.all$ISCO2C)
+
+PSL.glm2<-glm(dat.all$PSL10.top.quar~CNTRYID +GENDER+AGE10BAND+PARED+EDU + ISCO2C,data=dat.all,family="binomial")
+PSL.glm2
+summary(PSL.glm2)
+
+library(sjPlot)
+sjp.glm(PSL.glm2)
+```
+
+PS-TRE Model 3: Country + Socio-Demographic Background + Occupational Categories + Info-Processing Skills USE (Overall)
+```{r}
+PSL.glm3<-glm(dat.all$PSL10.top.quar~CNTRYID +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK,data=dat.all,family="binomial")
+PSL.glm3
+summary(PSL.glm3)
+
+library(sjPlot)
+sjp.glm(PSL.glm3)
+```
+
+PS-TRE Model 4: Country + Socio-Demographic Background + Occupational Categories + Info-Processing Skills USE + Workplace Skills USE
+```{r}
+PSL.glm4<-glm(dat.all$PSL10.top.quar~CNTRYID +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK + INFLUENCE+PLANNING+TASKDISC+LEARNATWORK,data=dat.all,family="binomial")
+PSL.glm4
+summary(PSL.glm4)
+
+library(sjPlot)
+sjp.glm(PSL.glm4)
+```
+
+PS-TRE Model 5: Country + Socio-Demographic Background + Occupational Categories + Info-Processing Skills USE + Workplace Skills USE + AET Participation
+
+```{r}
+PSL.glm5<-glm(dat.all$PSL10.top.quar~CNTRYID +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK + INFLUENCE+PLANNING+TASKDISC+LEARNATWORK + AET_Par,data=dat.all,family="binomial")
+PSL.glm5
+summary(PSL.glm5)
+
+library(sjPlot)
+sjp.lm(PSL.glm5)
+```
+
+
+### Model Selection: Stepwise Forward Selection
+1. Fit a baseline model with only CNTRYID in it.
+2. Add one variable at a time.
+3. Compare (nested) models with and without the variable.
+
+```{r}
+PSL.glm0<-glm(dat.all$PSL10.top.quar~CNTRYID,data=dat.all,family="binomial")
+
+add1(PSL.glm0,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+Here we can see, several variables have the same p-value. For full transparency and reproducibility, we simply/arbitarily follow the order of entry to break ties.
+
+```{r}
+fit1.glm<-update(PSL.glm0, .~. + GENDER)
+
+add1(fit1.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit2.glm<-update(fit1.glm, .~. + AGE10BAND)
+
+add1(fit2.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit3.glm<-update(fit2.glm, .~. + EDU)
+
+add1(fit3.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit4.glm<-update(fit3.glm, .~. + ISCO2C)
+
+add1(fit4.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit5.glm<-update(fit4.glm, .~. + PARED)
+
+add1(fit5.glm,scope= ~ . + GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit6.glm<-update(fit5.glm, .~. + NUMWORK)
+
+add1(fit6.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit7.glm<-update(fit6.glm, .~. + AET_Par)
+
+add1(fit7.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit8.glm<-update(fit7.glm, .~. + READWORK)
+
+add1(fit8.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit9.glm<-update(fit8.glm, .~. + ICTWORK)
+
+add1(fit9.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit10.glm<-update(fit9.glm, .~. + WRITWORK)
+
+add1(fit10.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+```{r}
+fit11.glm<-update(fit10.glm, .~. + LEARNATWORK)
+
+add1(fit11.glm,scope= ~ . +GENDER+AGE10BAND+PARED+EDU + ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK +INFLUENCE+PLANNING+TASKDISC+LEARNATWORK +AET_Par,test="Chisq")
+```
+
+
+The "Best" Model from Forward Selection:
+```{r}
+PSL.glm.best<-glm(dat.all$PSL10.top.quar~CNTRYID + GENDER + AGE10BAND + EDU + 
+    ISCO2C + PARED + NUMWORK + AET_Par + READWORK + ICTWORK + WRITWORK + LEARNATWORK,data=dat.all,family="binomial")
+summary(PSL.glm.best)
+
+library(sjPlot)
+sjp.lm(PSL.glm.best)
+```
+
+### Model Selection: Backward Selection
+#### Manual F-test-based backward selection
+```{r}
+PSL.glm5<-glm(dat.all$PSL10.top.quar~CNTRYID +GENDER+AGE10BAND+PARED+EDU +ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK + INFLUENCE+PLANNING+TASKDISC+LEARNATWORK + AET_Par,data=dat.all,family="binomial")
+drop1(PSL.glm5,test="F")
+```
+```{r}
+drop1(update(PSL.glm5, ~ . -INFLUENCE),test="F")
+```
+```{r}
+drop1(update(PSL.glm5, ~ . -INFLUENCE -PLANNING),test="F")
+```
+```{r}
+drop1(update(PSL.glm5, ~ . -INFLUENCE -PLANNING -TASKDISC),test="F")
+```
+Now all variables are significant at p<.05.
+The final model is the same as the "best" model from forward section:
+```{r}
+summary(update(PSL.glm5, ~ . -INFLUENCE -PLANNING -TASKDISC))
+```
+
+#### Manual likelihood-ratio-test-based backward selection
+```{r}
+PSL.glm.null<-glm(dat.all$PSL10.top.quar~1,data=dat.all,family="binomial")
+
+PSL.glm5<-glm(dat.all$PSL10.top.quar~CNTRYID +GENDER+AGE10BAND+PARED+EDU +ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK + INFLUENCE+PLANNING+TASKDISC+LEARNATWORK + AET_Par,data=dat.all,family="binomial")
+
+drop1(PSL.glm5,test="LRT")
+```
+```{r}
+drop1(update(PSL.glm5, ~ . -INFLUENCE),test="LRT")
+```
+```{r}
+drop1(update(PSL.glm5, ~ . -INFLUENCE -PLANNING),test="LRT")
+```
+```{r}
+drop1(update(PSL.glm5, ~ . -INFLUENCE -PLANNING -TASKDISC),test="LRT")
+```
+Now all variables are significant at p<.05.
+The final model (& AIC) is the same as the "best" model from forward section:
+```{r}
+summary(update(PSL.glm5, ~ . -INFLUENCE -PLANNING -TASKDISC))
+```
+
+There are many other ways to do model selection, including automated procedures. Although we would not use these automated methods as a first line of model selection, they can be useful for seeing if the final result is robust to alternative procedures.
+
+#### Automated likelihood-ratio-test-based backward selection
+```{r}
+if(!("rms" %in% installed.packages()[,1])) {
+ install.packages("rms")
+ }
+library(rms)
+
+lrm.PSL.glm5<-rms::lrm(dat.all$PSL10.top.quar~CNTRYID +GENDER+AGE10BAND+PARED+EDU +ISCO2C +READWORK+WRITWORK+NUMWORK+ICTWORK + INFLUENCE+PLANNING+TASKDISC+LEARNATWORK + AET_Par,data=dat.all)
+
+fastbw(lrm.PSL.glm5,rule="p",sls=.05)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

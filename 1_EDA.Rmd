@@ -1,0 +1,197 @@
+---
+title: "RQ1 EDA"
+author: "Shiya"
+date: "Nov 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+setwd("C:/Users/Shiya/Desktop/PIAAC/1_EDA")
+load("C:/Users/Shiya/Desktop/PIAAC/0_Overview/.RData")
+```
+
+## RQ1-a.
+### For each coutry, the mean and s.e. of full-time professionals' PS-TRE, NUM & LIT proficiency scores will be calculated and compared with the mean proficiency scores provided by the OECD document (2013c, p.258 & p.263).
+* Full-time Professionals' Mean PS-TRE Score (s.e.) by country (to be compared with ???)
+
+```{r}
+if(!("psych" %in% installed.packages()[,1])) {
+ install.packages("psych")
+ }
+library(psych)
+
+if(!("plotrix" %in% installed.packages()[,1])) {
+ install.packages("plotrix")
+ }
+library(plotrix)
+
+summary.PSL10<-describeBy(dat.all$mean.PSL10,dat.all$CNTRYID,mat=TRUE)[c("group1","n","mean","sd","se")]
+summary.PSL10
+
+tapply(dat.all$mean.PSL10, list(dat.all$CNTRYID, dat.all$ISCO2C), mean, na.rm=TRUE)
+tapply(dat.all$mean.PSL10, list(dat.all$CNTRYID, dat.all$ISCO2C), std.error, na.rm=TRUE)
+```
+
+Within each country, the distribution of PSL proficiency scores by gender*age group:
+```{r}
+PSL.array<-tapply(dat.all$mean.PSL10,list(dat.all$GENDER,dat.all$AGE10BAND,dat.all$CNTRYID),mean,na.rm=TRUE)
+PSL.array
+PSL.array2<-tapply(dat.all$mean.PSL10,list(dat.all$PARED,dat.all$EDU,dat.all$CNTRYID),mean,na.rm=TRUE)
+PSL.array2
+```
+
+
+
+* Full-time Professioals' Mean NUM Score & s.e. (to be compared with Table A2.6a of OECD 2013c, p.263)
+```{r}
+summary.NUM10<-describeBy(dat.all$mean.NUM10,dat.all$CNTRYID,mat=TRUE)[c("group1","n","mean","sd","se")]
+summary.NUM10
+
+tapply(dat.all$mean.NUM10, list(dat.all$CNTRYID, dat.all$ISCO2C), mean, na.rm=TRUE)
+tapply(dat.all$mean.NUM10, list(dat.all$CNTRYID, dat.all$ISCO2C), std.error, na.rm=TRUE)
+```
+
+Within each country, the distribution of NUM proficiency scores by gender*age group:
+```{r}
+NUM.array<-tapply(dat.all$mean.NUM10,list(dat.all$GENDER,dat.all$AGE10BAND,dat.all$CNTRYID),mean,na.rm=TRUE)
+NUM.array
+NUM.array2<-tapply(dat.all$mean.NUM10,list(dat.all$PARED,dat.all$EDU,dat.all$CNTRYID),mean,na.rm=TRUE)
+NUM.array2
+```
+
+
+
+* Full-time Professioals' Mean LIT Score & s.e. (to be compared with Table A2.2a of OECD 2013c, p.258)
+```{r}
+summary.LIT10<-describeBy(dat.all$mean.LIT10,dat.all$CNTRYID,mat=TRUE)[c("group1","n","mean","sd","se")]
+summary.LIT10
+
+tapply(dat.all$mean.LIT10, list(dat.all$CNTRYID, dat.all$ISCO2C), mean, na.rm=TRUE)
+tapply(dat.all$mean.LIT10, list(dat.all$CNTRYID, dat.all$ISCO2C), std.error, na.rm=TRUE)
+```
+
+Within each country, the distribution of LIT proficiency scores by gender*age group:
+```{r}
+LIT.array<-tapply(dat.all$mean.LIT10,list(dat.all$GENDER,dat.all$AGE10BAND,dat.all$CNTRYID),mean,na.rm=TRUE)
+LIT.array
+LIT.array2<-tapply(dat.all$mean.LIT10,list(dat.all$PARED,dat.all$EDU,dat.all$CNTRYID),mean,na.rm=TRUE)
+LIT.array2
+```
+
+
+
+## RQ1-b.
+As stated in the First Results from the Survey of Adult Skills (OECD, 2013c, p.96), "high levels of proficiency in literacy and numeracy go hand in hand with high levels of proficiency in problem solving in digital environments".
+
+In our sample, the correlation between PSL and NUM/LIT is .74/.79 across the 14 participating countries.
+```{r}
+mean.LNP10<-c("mean.LIT10","mean.NUM10","mean.PSL10")
+
+if(!("Hmisc" %in% installed.packages()[,1])) {
+ install.packages("Hmisc")
+ }
+library(Hmisc)
+
+rcorr(as.matrix(dat.all[mean.LNP10]))
+```
+
+```{r}
+if(!("ggplot2" %in% installed.packages()[,1])) {
+ install.packages("ggplot2")
+ }
+library(ggplot2)
+
+qplot(x=mean.NUM10,y=mean.PSL10,data=dat.all,color=GENDER,geom=c("point","smooth"),method="lm",se=FALSE)
+qplot(x=mean.LIT10,y=mean.PSL10,data=dat.all,color=GENDER,geom=c("point","smooth"),method="lm",se=FALSE)
+qplot(x=mean.LIT10,y=mean.NUM10,data=dat.all,color=GENDER,geom=c("point","smooth"),method="lm",se=FALSE)
+```
+
+```{r}
+qplot(x=mean.NUM10,y=mean.PSL10,data=dat.all,color=AGE10BAND,geom=c("point","smooth"),method="lm",se=FALSE)
+qplot(x=mean.LIT10,y=mean.PSL10,data=dat.all,color=AGE10BAND,geom=c("point","smooth"),method="lm",se=FALSE)
+qplot(x=mean.LIT10,y=mean.NUM10,data=dat.all,color=AGE10BAND,geom=c("point","smooth"),method="lm",se=FALSE)
+```
+
+
+### For each coutry, the correlation between PSL&NUM, PSL&LIT and NUM&LIT calculated and compared across the 14 participating countries.
+Let's look at these correlations by country, gender & age:
+```{r}
+if(!("dplyr" %in% installed.packages()[,1])) {
+ install.packages("dplyr")
+ }
+library(dplyr)
+
+cor.PN<-data.frame(dat.all %>%
+  group_by(CNTRYID,GENDER,AGE10BAND) %>%
+  summarise(Cor=cor(mean.PSL10,mean.NUM10,use="na.or.complete")))
+
+cor.PL<-data.frame(dat.all %>%
+  group_by(CNTRYID,GENDER,AGE10BAND) %>%
+  summarise(Cor=cor(mean.PSL10,mean.LIT10,use="na.or.complete")))
+
+cor.NL<-data.frame(dat.all %>%
+  group_by(CNTRYID,GENDER,AGE10BAND) %>%
+  summarise(Cor=cor(mean.NUM10,mean.LIT10,use="na.or.complete")))
+```
+
+Now that we've got 14x6x2x4 correlation coefficients for each pair of key-info. processing skills, let's transform them to the normally distributed Fisher' Z.
+```{r}
+cor.PN$CorZ<-fisherz(cor.PN$Cor)
+cor.PL$CorZ<-fisherz(cor.PL$Cor)
+cor.NL$CorZ<-fisherz(cor.NL$Cor)
+```
+
+The graphs below show correlations (between PSL and NUM/LIT) change between countries, as well as the number of gender by age groups taken into account for calculationg the mean coefficients of each country. 
+Looks like correlations differ among countries, with DNK presenting the highest values and SVK the lowest.
+```{r}
+if(!("gplots" %in% installed.packages()[,1])) {
+ install.packages("gplots")
+ }
+library(gplots)
+
+plotmeans(cor.PN$CorZ~cor.PN$CNTRYID,las=2)
+plotmeans(cor.PL$CorZ~cor.PL$CNTRYID,las=2)
+plotmeans(cor.NL$CorZ~cor.NL$CNTRYID,las=2)
+```
+
+The boxplots below show that in addition to mean/median differences, each country present a different amount of variation in correlations (betwee PSL and NUM/LIT).
+
+```{r}
+boxplot(cor.PN$CorZ~cor.PN$CNTRYID,main="Correlation between PSL & NUM by Country",xlab="Country",ylab="Fisher'Z",col="light blue",ylim=c(0,2),las=2)
+
+boxplot(cor.PL$CorZ~cor.PL$CNTRYID,main="Correlation between PSL & LIT by Country",xlab="Country",ylab="Fisher'Z",col="light green",ylim=c(0,2),las=2)
+
+boxplot(cor.NL$CorZ~cor.NL$CNTRYID,main="Correlation between PSL & LIT by Country",xlab="Country",ylab="Fisher'Z",col="grey",ylim=c(0,2),las=2)
+```
+
+Are the variations in correlation coefficients between countries due to true differences about population means or just due to samping variablity? 
+To answer this question, ANOVA calculates F statistics which compares the variation among different countries in our sample to the variation within countries.
+          F statistics= variation among sample means/Variation within groups
+          
+All the 3 p-values are less than .05. 
+We conclude that there are significant between-country variations in correlations (between PSL and NUM/LIT).
+Simply put, not all the correlations are equal across the 14 participating countries. 
+```{r}
+summary(aov(cor.PN$CorZ~cor.PN$CNTRYID))
+summary(aov(cor.PL$CorZ~cor.PL$CNTRYID))
+summary(aov(cor.NL$CorZ~cor.NL$CNTRYID))
+```
+          
+          
+To determine which countries are significantly different from the others, a post hoc test (i.e., pair comparison) is conducted:
+* There is a significant diffeerence in correlations (between PSL and NUM) between DNK-SVK.
+```{r}
+TukeyHSD(aov(cor.PN$CorZ~cor.PN$CNTRYID))
+```
+* There is a significant diffeerence in correlations (between PSL and NUM) between DNK-SVK and UK-SVK.
+```{r}
+TukeyHSD(aov(cor.PL$CorZ~cor.PL$CNTRYID))
+```
+
+* There is a significant diffeerence in correlations (between NUM and LIT) between DNK-BEL,CZE,GEM,IRL,NLD,POL,SVK,USA and SWE-GEM.
+```{r}
+TukeyHSD(aov(cor.NL$CorZ~cor.NL$CNTRYID))
+```
+
+
