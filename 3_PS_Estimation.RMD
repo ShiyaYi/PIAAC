@@ -1,0 +1,373 @@
+---
+title: "Chapter 2"
+author: "Shiya"
+date: "March 16, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+setwd("C:/Users/YIQ/Desktop/PIAAC/4_Propensity Score/2")
+```
+
+## Load the Data
+```{r}
+if(!("foreign" %in% installed.packages()[,1])) {
+ install.packages("foreign")
+ }
+library(foreign)
+
+dat.all<-read.spss("C:\\Users\\YIQ\\Desktop\\PIAAC\\Full-time Professionals\\ALL_new.sav",use.value.labels = FALSE)
+
+dat.all<-as.data.frame(dat.all,stringsAsFactors = FALSE)
+
+dat.all$AGE10BAND<-factor(dat.all$AGE10BAND)
+
+dat.all$GENDER<-factor(dat.all$GENDER)
+
+dat.all$EDU<-factor(dat.all$EDU)
+
+dat.all$PARED[dat.all$PARED>3]<-NA
+dat.all$PARED<-factor(dat.all$PARED)
+
+dat.all$ISCO2C<-as.numeric(dat.all$ISCO2C)
+dat.all$ISCO2C[dat.all$ISCO2C>100]<-NA
+dat.all$ISCO2C[dat.all$ISCO2C<20]<-NA
+dat.all$ISCO2C<-factor(dat.all$ISCO2C)
+
+dat.all$Sector<-factor(dat.all$Sector)
+
+dat.all$Role<-factor(dat.all$Role)
+
+dat.all$BORNLANG<-as.numeric(dat.all$BORNLANG)
+dat.all$BORNLANG[dat.all$BORNLANG>4]<-NA
+dat.all$BORNLANG<-factor(dat.all$BORNLANG)
+
+dat.all$AET<-factor(dat.all$AET)
+dat.all$AET_Par<-factor(dat.all$AET_Par)
+```
+
+## Subset the Data
+```{r}
+CovarNames<-c("AGE10BAND","GENDER","EDU","PARED","ISCO2C","READWORK","WRITWORK","NUMWORK","ICTWORK","INFLUENCE", 
+    "PLANNING","TASKDISC","LEARNATWORK","READYTOLEARN","Sector","Role","Flexibility","Satisfy","YEARLYINCPR","Health", 
+    "FamilySize","BORNLANG")
+
+VarNames<-c("AET","AET_origin","AET_Par","AET_Par_origin","HIGH_PVPSL1","Q4_PVPSL1","Q1_PVPSL1", "HIGH_PVLIT1","Q4_PVLIT1","Q1_PVLIT1", "HIGH_PVNUM1","Q4_PVNUM1","Q1_PVNUM1","CNTRYID","SEQID","SPFWT0")
+
+subset<-c(CovarNames,VarNames)
+new.data<-dat.all[subset]
+
+new.data$AET<-factor(new.data$AET)
+new.data$AET_Par<-factor(new.data$AET_Par)
+```
+
+## Missing Data
+```{r}
+Missing.Indicator<-data.frame(is.na(new.data))
+propMissing<-apply(Missing.Indicator,2,mean)
+
+names(Missing.Indicator)[propMissing>0]<-paste(names(new.data)[propMissing>0],"NA",sep="")
+
+for (var in 1:ncol(Missing.Indicator)) {
+  Missing.Indicator[,var] <- as.numeric(Missing.Indicator[,var])}
+  
+new.data<-cbind(new.data, Missing.Indicator[,propMissing>0])
+print(round(propMissing,3))
+```
+
+## Multiple Imputation by Chained Equations for Participants and Non-Participants Spearately
+* predictve mean matching (pmm) as the univariate imputation method
+```{r}
+if(!("mice" %in% installed.packages()[,1])) {
+ install.packages("mice")
+ }
+library(mice)
+
+if(!("lattice" %in% installed.packages()[,1])) {
+ install.packages("lattice")
+ }
+library(lattice)
+
+long.imputation<-c()
+
+for (group in 0:1) {
+  predictor.selection <- quickpred(subset(new.data, AET==group), mincor=.1, minpuc=.5, method='pearson', exclude=c("SEQID"))
+  imputation <- mice(subset(new.data, AET==group), m=5, method="pmm", visitSequence="monotone", predictorMatrix=predictor.selection)
+  long.imputation=rbind(long.imputation, complete(imputation, action="long"))
+}
+```
+
+## Combine All 5 Impuated Datasets
+```{r}
+imputation1<-subset(long.imputation, subset=.imp==1)
+
+if(!("mitools" %in% installed.packages()[,1])) {
+ install.packages("mitools")
+ }
+library(mitools)
+
+allImputations<-imputationList(list(
+  subset(long.imputation, subset=.imp==1),
+  subset(long.imputation, subset=.imp==2),
+  subset(long.imputation, subset=.imp==3),
+  subset(long.imputation, subset=.imp==4),
+  subset(long.imputation, subset=.imp==5)))
+```
+
+## Check Duplicated Missing Indicators
+```{r}
+missingCorrelations<-cor(Missing.Indicator[,propMissing>.05])
+diag(missingCorrelations)<-0
+
+maxCorrelations<-apply(missingCorrelations,2,max)
+dummyNAnames<-names(maxCorrelations)[maxCorrelations<.8]
+
+maxCorrelationsHigh<-maxCorrelations[!duplicated(maxCorrelations)]
+dummyNAnames<-c(dummyNAnames, names(maxCorrelationsHigh)[maxCorrelationsHigh>=.8])
+```
+
+## Define Design Object that Descirbes Sample Characteristics
+```{r}
+if(!("survey" %in% installed.packages()[,1])) {
+ install.packages("survey")
+ }
+library(survey)
+
+options(survey.longly.psu="adjust")
+
+surveyDesign1<-svydesign(ids=~SEQID, strata=~CNTRYID, weights=~SPFWT0, data=imputation1, nest=T)
+
+surveyDesignAll<-svydesign(ids=~SEQID, strata=~CNTRYID, weights=~SPFWT0, data=allImputations, nest=T)
+```
+
+##===========================================
+## Estimation of PS Using Logistic Regression 
+* with adjustments for clustering & stratification
+```{r}
+PSformula<-paste(CovarNames,collapse="+")
+PSformula<-formula(paste("AET~",PSformula,sep=""))
+print(PSformula)
+
+PSmodel1<-svyglm(PSformula, design=surveyDesign1, family=binomial)
+
+PSmodelAll<-with(surveyDesignAll, svyglm(PSformula, family=quasibinomial))
+
+PScore1<-fitted(PSmodel1)
+imputation1$PScore1<-PScore1
+
+PScoreAll<-sapply(PSmodelAll, fitted)
+
+PScoreMean<-apply(PScoreAll, 1, mean)
+
+allImputations$PScoreMean<-PScoreMean
+
+allImputations<-update(allImputations, pScores=PScoreMean)
+```
+
+##============================================
+## Estimation of PS Using Classification Trees
+```{r}
+if(!("party" %in% installed.packages()[,1])) {
+ install.packages("party")
+ }
+library(party)
+
+myctree<-ctree(PSformula,data=imputation1)
+```
+
+# tiff image & pdf
+```{r}
+tiff("Classification Tree to Estimate Propensity Score of AET Participation.tif", res=600, compression="lzw",height=6, width=15, units="in")
+plot(myctree)
+dev.off()
+
+pdf("Classification Tree to Estimate Propensity Score of AET Participation.pdf", height=6, width=15)
+plot(myctree)
+dev.off()
+```
+
+# Fit Random Forests with seetings to produce results that are not biased towards categorical variables with many categories and continuous variables
+```{r}
+set.seed(2014)
+mycontrols<-cforest_unbiased(ntree=1000, mtry=5)
+mycforest<-cforest(PSformula, data=imputation1, weights=imputation1$SPFWT0, controls=mycontrols)
+
+PScoreRF<-predict(mycforest, type="prob")
+
+imputation1$PScoreRF<-matrix(unlist(PScoreRF),,2,byrow=T)[,2]
+
+save(list=c("myctree","mycforest","PScoreRF"), file="RF_results.Rdata", compress=T)
+```
+
+##============================
+## Estimation of PS Using GBM
+* GBM requires the treatment indicator to be numeric
+```{r}
+if(!("twang" %in% installed.packages()[,1])) {
+ install.packages("twang")
+ }
+library(twang)
+
+set.seed(2015)
+
+imputation1$AET<-as.numeric(imputation1$AET==1)
+
+myGBM<-ps(PSformula, data=imputation1, n.trees=10000, interaction.depth=4, shrinkage=.01, stop.method=c("es.max"), estimand="ATT", verbose=FALSE, sampw=imputation1$SPFWT0)
+
+summary(myGBM)
+```
+
+## tiff image & pdf
+```{r}
+tiff("Maximum Standardized Mean Differences between Participants & Non-participants for Iterations of the GBM Algorithm.tif", res=600, compression="lzw", height=6, width=15, units="in")
+plot(myGBM, type="b", color=F, lwd=2)
+dev.off()
+
+pdf("Maximum Standardized Mean Differences between Participants & Non-participants for Iterations of the GBM Algorithm.pdf", height=6, width=15)
+plot(myGBM, type="b", color=F)
+dev.off()
+```
+
+## Extract Propensity Scores
+```{r}
+PScoreGBM<-myGBM$ps
+names(PScoreGBM)="PScoreGBM"
+imputation1$PScoreGBM<-unlist(PScoreGBM)
+
+save(list=c("myGBM","PScoreGBM"), file="GBM_results.Rdata", compress=T)
+```
+
+##===================================================
+## Evaluation of Common Support
+```{r}
+new.data.imputed<-imputation1
+
+dim(new.data.imputed)
+
+with(new.data.imputed, by(PScoreMean, AET, summary))
+
+by(new.data.imputed[,41:43], new.data.imputed$AET, summary)
+```
+
+```{r}
+tableCommonSupport = rbind(
+  summary(new.data.imputed[new.data.imputed$AET==1,41:43]),
+  summary(new.data.imputed[new.data.imputed$AET==0,41:43]))
+
+rownames(tableCommonSupport)=c(rep("Participants",6), rep("Non-participants",6))
+
+write.csv(tableCommonSupport, file="Table_common_support.csv")
+```
+
+## % of Treated Cases above Maximum Control Cases 
+## % of Control Cases below Minimum Treated Cases 
+```{r}
+with(new.data.imputed, 100*c(
+  mean(as.numeric(PScore1[AET==1] > max(PScore1[AET==0]))),
+  mean(as.numeric(PScore1[AET==0] < min(PScore1[AET==1])))))
+
+percentageAbove=with(new.data.imputed, 100*c(
+  mean(as.numeric(PScore1[AET==1] > max(PScore1[AET==0]))),
+  mean(as.numeric(PScoreRF[AET==1] > max(PScoreRF[AET==0]))),
+  mean(as.numeric(PScoreGBM[AET==1] > max(PScoreGBM[AET==0])))))
+print(percentageAbove)
+
+percentageBelow=with(new.data.imputed, 100*c(
+  mean(as.numeric(PScore1[AET==0] < min(PScore1[AET==1]))),
+  mean(as.numeric(PScoreRF[AET==0] < min(PScoreRF[AET==1]))),
+  mean(as.numeric(PScoreGBM[AET==0] < min(PScoreGBM[AET==1])))))
+print(percentageBelow)
+```
+
+## Box-and-Whiskers Plot 
+```{r}
+new.data.imputed$AET=factor(new.data.imputed$AET)
+
+library(lattice)
+lattice.options(default.theme = standard.theme(color=FALSE))
+
+tiff("Box-and-Whiskers Plot of Propensity Score by Logistic Regression.tif", res=600, compression="lzw", height=6, width=15, units="in")
+
+bwplot(PScore1~AET,data=new.data.imputed,ylab="Propensity Scores by Logistic Regression",xlab="AET Participation",auto.key=TRUE)
+dev.off()
+```
+
+```{r}
+tiff("Box-and-Whiskers Plot of Propensity Score by Random Forests.tif", res=600, compression="lzw", height=6, width=15, units="in")
+
+bwplot(PScoreRF~AET,data=new.data.imputed,ylab="Propensity Scores by Random Forests",xlab="AET Participation",auto.key=TRUE)
+dev.off()
+```
+
+```{r}
+tiff("Box-and-Whisker Plot of Propensity Score by GBM.tif", res=600, compression="lzw", height=6, width=15, units="in")
+
+bwplot(PScoreGBM~AET,data=new.data.imputed,ylab="Propensity Scores by GBM",xlab="AET Participation",auto.key=TRUE)
+dev.off()
+```
+
+## Kernel Density Plot
+```{r}
+require(lattice)
+lattice.options(default.theme=standard.theme(color=FALSE))
+
+tiff("Kernel Density Plot of ropensity Score by Logistic Regression.tif", res=600, compression="lzw", height=6, width=15, units="in")
+
+densityplot(~PScore1, groups=AET, plot.points=F, xlim=c(0,1), lwd=2, 
+            data=new.data.imputed, ylab="Propensity Scores by Logistic Regression", xlab="AET Participation", auto.key=TRUE)
+dev.off()
+```
+
+```{r}
+tiff("Kernel Density Plot of Propensity Score by Random Forests.tif", res=600, compression="lzw", height=6, width=15, units="in")
+
+densityplot(~PScoreRF, groups=AET, plot.points=F, xlim=c(0,1), lwd=2, 
+            data=new.data.imputed, ylab="Propensity Scores by Random Forests", xlab="AET Participation", auto.key=TRUE)
+dev.off()
+```
+
+```{r}
+tiff("Kernel Density Plot of Propensity Score by GBM.tif", res=600, compression="lzw", height=6, width=15, units="in")
+
+densityplot(~PScoreGBM, groups=AET, plot.points=F, xlim=c(0,1), lwd=2, 
+            data=new.data.imputed, ylab="Propensity Scores by GBM", xlab="AET Participation", auto.key=TRUE)
+dev.off()
+```
+
+## Histogram
+* for all 5 imputed datasets
+```{r}
+allImputationsStacked<-data.frame()
+
+for (imp in 1:5) {
+  temp<-cbind(allImputations$imputations[[imp]], imputation=imp)
+  allImputationsStacked=rbind(allImputationsStacked, temp)}
+
+allImputationsStacked$AET<-factor(allImputationsStacked$AET, levels=c(0,1), labels=c("Non-participants","Participants"))
+
+allImputationsStacked$imputation<-factor(allImputationsStacked$imputation, labels=paste("Imputation", 1:5))
+
+library(lattice)
+lattice.options(default.theme=standard.theme(color=FALSE))
+
+tiff("Kernel Density Plots of Propensity Scores Estimated with Logistic Regression from 5 Imputed Datasets.tif", res=600, compression="lzw", height=6, width=15, units="in")
+
+densityplot(~pScores | imputation, data=allImputationsStacked, plot.points=F, lwd=2, groups=AET, xlab="Propensity Scores", auto.key=TRUE)
+dev.off()
+```
+
+```{r}
+tiff("Box-and-Whiskers Plots of Propensity Scores Estimated with Logistic Regression from 5 Imputed Datasets.tif", res=600, compression="lzw", height=6, width=15, units="in")
+
+bwplot(pScores~AET | imputation, data=allImputationsStacked, lwd=2, ylab="Propensity Scores", auto.key=TRUE)
+dev.off()
+```
+
+## Save Results
+```{r}
+save(list=c("new.data.imputed", "allImputations", "CovarNames", "VarNames", "PSformula"), file="Chapter2_results.Rdata", compress=T)
+save(list=ls(), file="Chapter2_All_results.Rdata", compress=T)
+```
+
+
